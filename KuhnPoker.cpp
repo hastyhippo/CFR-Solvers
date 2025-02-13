@@ -1,4 +1,5 @@
 #include<bits/stdc++.h>
+#include<random>
 using namespace std;
 typedef long long ll;
 
@@ -8,19 +9,16 @@ const char nl = '\n';
 #define CHECK 0
 #define NUM_ACTIONS 2
 
+const double threshold = 1e-4; 
 struct node {
     vector<double> strategy;
     vector<double> strategySum;
     vector<double> regretSum;
 };
 
-vector<char> actions = {'b', 'c'};
+vector<char> actions = {'c', 'b'};
 vector<int> cards = {1,0,2};
 map<string, node> position_to_node;
-/*
-    {"", {0,0,0}}, {"c", {0,0,0} }, {"b", {0,0,0}}, {"cc", {0,0,0}}, {"cb", {0,0,0}},
-     {"bc", {0,0,0}}, {"bb", {0,0,0}}, {"cbb", {0,0,0}}, {"cbc", {0,0,0}}
-*/
 
 int getAction(vector<double> strategy, int size) {
     double r = (double)rand() / RAND_MAX;
@@ -34,11 +32,10 @@ int getAction(vector<double> strategy, int size) {
     }
     return i;
 }
+
 void print_v(vector<double> v) {
     for (auto a : v) cout << a << " ";
     cout << '\n';
-}
-void printStrategy() {
 }
 
 struct node *getStrategy(string history) {
@@ -71,8 +68,20 @@ void normaliseStrategy(vector<double> &strategy, vector<double> regretSum) {
     }
 }
 
-double eval(string history, int p1, int p2) {
-    if (history.substr(history.length() - 2)== "cc") {
+vector<double> getFinalStrategy(vector<double> &strategySum) {
+    vector<double> finalStrategy(NUM_ACTIONS);
+    double sum = 0;
+    for (auto a : strategySum) {
+        sum += a;
+    }
+    for (int i = 0; i < NUM_ACTIONS; i++) {
+        finalStrategy[i] = (strategySum[i] / sum > threshold ? strategySum[i] / sum : 0);
+    }
+    return finalStrategy;
+}
+
+double getUtility(string history, int p1, int p2) {
+    if (history == "cc") {
         return p1 > p2 ? 1 : -1;
     }
     if (history[history.length() - 1] == 'c') {
@@ -83,59 +92,65 @@ double eval(string history, int p1, int p2) {
 
 
 double CFR(string history, double p1, double p2, bool player) {
-    struct node *currentNode = getStrategy(history);
     
-    //terminating condition
-    if (history.length() >= 3 && history.substr(1, history.length()) != "cb") {
-        return eval(history, player ? cards[0] : cards[1], player ? cards[1] : cards[0]);
+    // Terminating condition
+    if (history.length() >= 2 && history != "cb") {
+        return getUtility(history, player ? cards[0] : cards[1], player ? cards[1] : cards[0]);
     }
+    struct node *currentNode = getStrategy(to_string(player ? cards[0] : cards[1]) + history);
 
     vector<double> strategy = currentNode->strategy;
 
-    //otherwise loop through and update CFR value for this history
+    // Otherwise loop through and update CFR value for this history
     vector<double> action_val(NUM_ACTIONS, 0);
-    double node_val = 0;
+    double node_utility = 0;
     for (int i = 0; i < NUM_ACTIONS; i++) {
-        // recurse through the game tree to calculate all CFR values
+        // Recurse through the game tree to calculate all CFR values
         if (player) {
             action_val[i] = -CFR(history + actions[i], p1 * strategy[i], p2, !player);
         } else {
             action_val[i] = -CFR(history + actions[i], p1, p2 * strategy[i], !player);
         }
-        node_val += action_val[i] * strategy[i];
+        node_utility += action_val[i] * strategy[i];
     }
 
-    // update the regret sum accordingly and add to strategy sum
+    // Update the regret sum accordingly and add to strategy sum
     for (int i = 0; i < NUM_ACTIONS; i++) {
-        currentNode->regretSum[i] += (player ? p2 : p1) * (action_val[i] - node_val);
+        currentNode->regretSum[i] += (player ? p2 : p1) * (action_val[i] - node_utility);
         currentNode->strategySum[i] += (player ? p1 : p2) *  strategy[i];
     }
-    print_v(currentNode->regretSum);
-    print_v(currentNode->strategy);
 
     // Update the strategy based on current regret sum
     normaliseStrategy(currentNode->strategy, currentNode->regretSum);
-    cout << history << " | " << node_val << "\n";
-    return node_val;
+    return node_utility;
 }
 
-void train(int iterations) {
+void train(int iterations, double &avgSum) {
+    random_device rd;
+    mt19937 g(rd());
+
     while(iterations--) {
-        CFR("0", 1, 1, true);
+        shuffle(cards.begin(), cards.end(), g);
+        avgSum += CFR("", 1, 1, true);
     }
 }
 
 int main() {
-    srand(time(0)*1000);
+    double avgSum = 0;
+    int iterations = 0;
 
-    /*
-        regretSum
-        strategySum
-        strategy
-    */
-   for (int i = 0; i < 105; i++) {
-        cout << CFR("0", 1, 1, true) << "\n\n";
+    while(true) {
+        int n;
+        cout << "How many times to train: ";
+        cin >> n;
+        iterations += n;
 
-   }
-    
+        train(n, avgSum);
+        for (auto a : position_to_node) {
+            cout << a.first << " | ";
+            cout << setprecision(5);
+            print_v(getFinalStrategy(a.second.strategySum));
+        }
+        cout << avgSum / iterations << '\n';
+    }
 }
