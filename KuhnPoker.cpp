@@ -124,7 +124,20 @@ double CFR(string history, double p1, double p2, bool player) {
     normaliseStrategy(currentNode->strategy, currentNode->regretSum);
     return node_utility;
 }
+void biasedShuffle(vector<int> &cards, mt19937 &rng) {
+    double bias_prob = 1.0 / 10.0; // 1/20 chance of bias
+    uniform_real_distribution<double> dist(0.0, 1.0);
 
+    if (dist(rng) < bias_prob) {
+        // Ensure player 1 has a higher card than player 2
+        do {
+            shuffle(cards.begin(), cards.end(), rng);
+        } while (cards[1] <= cards[0]);
+    } else {
+        // Shuffle normally
+        shuffle(cards.begin(), cards.end(), rng);
+    }
+}
 void train(int iterations, double &avgSum) {
     random_device rd;
     mt19937 g(rd());
