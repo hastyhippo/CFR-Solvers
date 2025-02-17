@@ -7,16 +7,14 @@ const char nl = '\n';
 
 #define STAND 0
 #define HIT 1
-#define DOUBLEDOWN 2
-#define SPLIT 3
-#define NUM_ACTIONS 4
+// #define DOUBLEDOWN 2
+// #define SPLIT 3
+#define NUM_ACTIONS 2
 
 struct node {
-    vector<double> strategy;
-    vector<double> strategySum;
-    vector<double> regretSum;
+    int strategy;
+    double ev;
 };
-
 
 vector<string> move_name = {"STAND", "HIT", "DOUBLE", "SPLIT"};
 const double threshold = 1e-3;
@@ -156,232 +154,134 @@ int getCard() {
     return card;
 }
 
-uint16_t makeMove(uint16_t startingHistory, int move) {
-    uint16_t newHistory = startingHistory;
-    setCanDouble(newHistory, false);
-    if (move == STAND) {
-        setStand(newHistory);
-    } else if (move == HIT) {
-        int card = getCard();
-        // cout << "CARD IS " << card << " \n\n";
-        setPlayerCount(newHistory, getPlayerCount(newHistory) + card);
-        setCanDouble(newHistory, false);
-        setCanSplit(newHistory, false);
-        if (card == 11) setHasAce(newHistory, true);
-    } else if (move == DOUBLEDOWN) {
-        int card = getCard();
-        // cout << "CARD IS " << card << " \n\n";
+// uint16_t makeMove(uint16_t startingHistory, int move) {
+//     uint16_t newHistory = startingHistory;
+//     int playerCount = getPlayerCount(startingHistory);
+//     bool playerHasAce = hasAce(startingHistory);
 
-        setPlayerCount(newHistory, getPlayerCount(newHistory) + card);
-        setCanDouble(newHistory, false);
-        setDoubled(newHistory);
-        setCanSplit(newHistory, false);
-        if (card == 11) setHasAce(newHistory, true);
-    }
-    return newHistory;
-}
+//     // Disable doubling and splitting after the first move
+//     setCanDouble(newHistory, false);
+//     setCanSplit(newHistory, false);
 
-int resultAfterDealing(uint16_t history) {
+//     if (move == STAND) {
+//         setStand(newHistory);
+//     } else if (move == HIT || move == DOUBLEDOWN) {
+//         int card = getCard();
+
+//         // Update player count and handle Aces
+//         if (card == 11) {
+//             if (playerCount + card > 21) {
+//                 playerCount += 1;
+//             } else {
+//                 playerCount += 11;
+//                 playerHasAce = true;
+//             }
+//         } else {
+//             playerCount += card;
+//         }
+
+//         // Adjust for Aces if the count exceeds 21
+//         if (playerCount > 21 && playerHasAce) {
+//             playerCount -= 10; // Treat Ace as 1 instead of 11
+//             playerHasAce = false;
+//         }
+
+//         // Update the new history
+//         setPlayerCount(newHistory, playerCount);
+//         setHasAce(newHistory, playerHasAce);
+
+//         // Handle doubling down
+//         if (move == DOUBLEDOWN) {
+//             setDoubled(newHistory);
+//         }
+//     } else if (move == SPLIT) {
+//         // Handle splitting (not implemented in this example)
+//         // This would require creating two new hands and updating the game state accordingly.
+//     }
+
+//     return newHistory;
+// }
+
+int resultAfterDealing(uint16_t history, bool print) {
     int dealerCount = getDealerCount(history);
     int playerCount = getPlayerCount(history);
-    if (playerCount > 21 && hasAce(history)) playerCount -=10;
-    bool hasAce = dealerCount == 11;
-    // cout << "start: " << dealerCount << " \n";
 
-    while (true) {
+    if (playerCount > 21 && hasAce(history)) {
+        playerCount -= 10;
+    }
+
+    bool dealerHasAce = (dealerCount == 11);
+    if (print) cout << "start count: " << dealerCount<< "\n";
+
+    while (dealerCount < 17 || (dealerHasAce && dealerCount == 17)) {
         int card = getCard();
-        if (hasAce) {
-            if (dealerCount > 31) return -1;
-            if ((dealerCount >= 17 && dealerCount <= 21) || dealerCount >= 27) {
-                // cout << '\n' <<  playerCount   << " (ace)| " << dealerCount << '\n';
-                if (dealerCount > playerCount) return -1;
-                if (dealerCount == playerCount) return 0;
-                if (dealerCount < playerCount) return 1;
-            } 
-            // cout << card << " + " << dealerCount << " = " << dealerCount + card << "\n";
+        if (print) cout << "card: " << card << "  ";
 
-            dealerCount += card;
-        } else {
-            if (dealerCount >= 17) {
-                // cout << '\n' <<  playerCount   << " | " << dealerCount << '\n';
-                if (dealerCount > 21) return 1;
-                if (dealerCount > playerCount) return -1;
-                if (dealerCount == playerCount) return 0;
-                if (dealerCount < playerCount) return 1;
-            }
-            if (card == 11) hasAce = true;
-            // cout << card << " + " << dealerCount << " = " << dealerCount + card << "\n";
-            dealerCount += card;
-        }
- 
-    }
-}
-
-int getAction(vector<double> strategy, int size) {
-    double r = (double)rand() / RAND_MAX;
-    double cumulativeSum = 0;
-    int i = 0;
-    for (; i < NUM_ACTIONS; i++) {
-        cumulativeSum += strategy[i];
-        if (cumulativeSum >= r) {
-            break;
-        }
-    }
-    return i;
-}
-
-void print_v(vector<double> v) {
-    for (auto a : v) cout << a << " ";
-    cout << '\n';
-}
-
-struct node *getStrategy(uint16_t history) {
-    if (position_to_node.count(history) == 0) {
-        double n = 2 + canDouble(history) + canSplit(history);
-        position_to_node[history] = {
-            {1/n, 1/n, (canDouble(history) * (1/n)), (canSplit(history) * (1/n))},
-            vector<double>(NUM_ACTIONS),
-            vector<double>(NUM_ACTIONS),
-        };
-    }
-    return &position_to_node[history];
-}
-
-void normaliseStrategy(vector<double> &strategy, vector<double> regretSum) {
-    double sum = 0;
-    for (auto a : regretSum) sum += max(a, 0.0);
-    if (sum ==  0) {
-        strategy = {1/2,1/2,0,0}; return;
-    } 
-    for (int i = 0; i < 4; i++) {
-        strategy[i] = (max(regretSum[i], 0.0)) / sum;
-    }
-    return;
-}
-
-vector<double> getFinalStrategy(vector<double>strategySum) {
-    double sum = 0;
-    for (auto a : strategySum) sum += a;
-    if (sum == 0) {
-        return {1/2,1/2,0,0};
-    }
-    vector<double> finalStrategy(NUM_ACTIONS);
-    for (int i = 0; i < NUM_ACTIONS; i++) {
-        finalStrategy[i] = strategySum[i] / sum;
-    }
-    return finalStrategy;
-}
-
-double getUtility(uint16_t history) {
-    return 0;
-}
-
-double CFR(uint16_t history, double p1) {
-    // if terminal node
-    // printHistory(history);
-    if ((!hasAce(history) && getPlayerCount(history) > 21) || (hasAce(history) && getPlayerCount(history) > 31)) {
-        // cout << "Returning: " << (isDouble(history) ? -2 : -1) << "\n\n";
-        return isDouble(history) ? -2 : -1;
-    }
-    if (isStand(history) || isDouble(history)) {
-        // cout << "Returning: " << (isDouble(history) ? 2 : 1) * (resultAfterDealing(history)) << "\n\n";
-        return (isDouble(history) ? 2 : 1) * (resultAfterDealing(history));
-    }
-
-    struct node *currentNode = getStrategy(history);
-    vector<double> strategy = currentNode->strategy;
-    double node_util = 0;
-    vector<double> action_util(NUM_ACTIONS,0);
-
-    vector<bool> possible_moves = {1,1, canDouble(history), canSplit(history)};
-    for (int i = 0; i < NUM_ACTIONS; i++) {
-        if (!possible_moves[i]) continue;
-        if (i == SPLIT) {
-            int count = getPlayerCount(history) / 2;
-            for (int i = 0; i < 2; i++) {
-                int new_card = getCard();
-                uint16_t new_history = CreateHistory(
-                    count + new_card, getDealerCount(history), false, true, new_card == 11 || count == 11
-                );
-                action_util[i] += CFR(new_history, p1 * strategy[i]);
-                node_util += action_util[i] * strategy[i];
+        if (card == 11) {
+            if (card + dealerCount > 21) {
+                dealerCount += 1;
+            } else {
+                dealerCount += 11;
+                dealerHasAce = true;
             }
         } else {
-            // cout << "MOVE: " << move_name[i] << '\n';
-            action_util[i] += CFR(makeMove(history, i), p1 * strategy[i]);
-            node_util += action_util[i] * strategy[i];
+            dealerCount += card;
+        }
+
+        if (dealerCount > 21 && dealerHasAce) {
+            dealerCount -= 10;
+            dealerHasAce = false;
+        }
+        if (dealerCount > 21) {
+            if (print) cout << "dealer count: " << dealerCount<< "\n";
+            return 1;
         }
     }
+    if (print) cout << "dealer count: " << dealerCount<< "\n";
 
-    for (int i = 0; i < NUM_ACTIONS; i++) {
-        if (possible_moves[i]) {
-            currentNode->regretSum[i] += (action_util[i] - node_util) * p1;
-            currentNode->strategySum[i] += strategy[i] * p1;
-        }
-    }
+    if(print) cout << "Dealer: " << dealerCount << " | player: " << playerCount << "\n"; 
+    if (dealerCount > playerCount) return -1;
+    else if (dealerCount == playerCount) return 0; 
+    else return 1;
+}
 
-    normaliseStrategy(currentNode->strategy, currentNode->regretSum);
+double MCSearch(uint16_t history, bool print) {
 
-    // cout << "Player: " << getPlayerCount(history) << " | Dealer: " << getDealerCount(history) << "\n"; 
-    for (int i = 0; i < NUM_ACTIONS; i++) {
-        if (possible_moves[i]) {
-            // cout << move_name[i] << " | " << action_util[i] << '\t';
-        }
-    }
-    // cout << "\n";
-    return 0;
 }
 
 void train(int iterations) {
-    int playercount, dealercount, candouble, cansplit, hasace;
-    cout << "Playercount: ";
-    cin >> playercount;
 
-    for (int i = 2; i <= 11; i++) {
+    double sum = 0;
+    uint16_t history = 0;
 
-        uint16_t new_hist = CreateHistory(playercount, i, false, true, false);
-        printHistory(new_hist);
-        
-        for(int i = 0; i <iterations; i++) {
-            // uint16_t history = 0;
-            // int c1 = getCard(), c2 = getCard(), c3 = getCard();
-            // // int c1 = 10, c2 = 11, c3 = 10;
-            // if (c1 == c2) setCanSplit(history, true);
-            // setCanDouble(history, true);
-            // if (c1 == 11 || c2 == 11) setHasAce(history, true);
-            // cout << c1 << " " << c2 << " " << c3 << nl;
-            // setPlayerCount(history, c1 + c2);
-            // setDealerCount(history, c3);
-            // CFR(history, 1);
-            CFR(new_hist, 1);
-        }
-        struct node n = position_to_node[new_hist];
-        vector<double> strategy = getFinalStrategy(n.strategySum);
-        cout << setprecision(3);
-        for (int i = 0; i < NUM_ACTIONS; i++){
-            if (strategy[i] > 0.5) {
-                cout << move_name[i] << '\n';
-                break;
+    for(int i = 0; i <iterations; i++) {
+        int c1 = getCard(), c2 = getCard(), c3 = getCard();
+        // cin >> c1 >> c2 >> c3;
+        if (c1 + c2 == 21) {
+            if (c3 + getCard() == 21) {
+                sum += 0;
+            } else {
+                sum += 1.5;
             }
+        } else {
+            // int c1 = 10, c2 = 11, c3 = 10;
+            if (c1 == c2) setCanSplit(history, true);
+            setCanDouble(history, true);
+            if (c1 == 11 || c2 == 11) setHasAce(history, true);
+            setPlayerCount(history, c1 + c2);
+            setDealerCount(history, c3);
+            double d = MCSearch(history, false);
+            // cout << "\n";
+            cout << "Ev: "<< d << '\n';
+            sum += d;
         }
-        // cout << move_name[i] << ": " << ((strategy[i] < threshold )? 0 : strategy[i] ) << " | ";
-        cout << "\n";
-    }
 
-        // for (auto a : n.strategySum) cout << a << " ";
-        // cout << '\n';
-        // for (auto a : n.regretSum) cout << a << " ";
-        // cout << '\n';
-    // for (auto a : position_to_node) {
-    //     printHistory(a.first);
-    //     vector<double> strategy = getFinalStrategy(a.second.strategySum);
-    //     for (auto a  : strategy) cout << a << " ";
-    //     cout << "\n";
-    //     for (auto a : a.second.strategySum) cout << a << " ";
-    //     cout << '\n';
-    //     for (auto a : a.second.regretSum) cout << a << " ";
-    //     cout << '\n';
-    // }
+    }
+    cout << sum << " \n";
+    cout << "Ev: "<< sum/iterations << '\n';
+    // cout << move_name[i] << ": " << ((strategy[i] < threshold )? 0 : strategy[i] ) << " | ";
+    cout << "\n";
+
 
 }
 
@@ -404,8 +304,10 @@ int main() {
         // cout << "How many times to train: ";
         shuffle_deck();
         uint16_t start = 0;
+        cin >> n;
 
-        train(300000);
+        train(n);
+
         // while(n--) {
 
         //     makeMove(start, HIT);
