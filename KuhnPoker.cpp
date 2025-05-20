@@ -16,9 +16,13 @@ struct node {
     vector<double> regretSum;
 };
 
+double ANSWER = -0.0555556;
+
 vector<char> actions = {'c', 'b'};
 vector<int> cards = {1,0,2};
 map<string, node> position_to_node;
+
+int current_it = 0;
 
 int getAction(vector<double> strategy, int size) {
     double r = (double)rand() / RAND_MAX;
@@ -71,6 +75,7 @@ void normaliseStrategy(vector<double> &strategy, vector<double> regretSum) {
 vector<double> getFinalStrategy(vector<double> &strategySum) {
     vector<double> finalStrategy(NUM_ACTIONS);
     double sum = 0;
+
     for (auto a : strategySum) {
         sum += a;
     }
@@ -117,7 +122,7 @@ double CFR(string history, double p1, double p2, bool player) {
     // Update the regret sum accordingly and add to strategy sum
     for (int i = 0; i < NUM_ACTIONS; i++) {
         currentNode->regretSum[i] += (player ? p2 : p1) * (action_val[i] - node_utility);
-        currentNode->strategySum[i] += (player ? p1 : p2) *  strategy[i];
+        currentNode->strategySum[i] +=  (current_it) * ((player ? p1 : p2) *  strategy[i]);
     }
 
     // Update the strategy based on current regret sum
@@ -142,9 +147,19 @@ void train(int iterations, double &avgSum) {
     random_device rd;
     mt19937 g(rd());
 
+    int digits = 1;
     while(iterations--) {
         shuffle(cards.begin(), cards.end(), g);
         avgSum += CFR("", 1, 1, true);
+
+        if (current_it > pow(10,digits)) {
+            digits++;
+        }
+        int lower_power = (int)(pow(10, digits-1));
+        if (current_it % (2 * lower_power) == 0) {
+            cout << current_it << " | " << abs((avgSum/current_it)-ANSWER) << '\n';
+        }
+        current_it++;
     }
 }
 
